@@ -1,0 +1,135 @@
+from manim import *
+
+
+class FairQueueAnimation(Scene):
+    def construct(self):
+        # Colors for different peers
+        spammer_color = GRAY
+        peer_colors = [BLUE, GREEN, YELLOW]
+
+        # Move everything left
+        LEFT_OFFSET = -4  # Shift everything left
+
+        # Create peer queues
+        peer_queues = VGroup()
+        queue_labels = VGroup()
+
+        # Spammer queue (top)
+        spammer_queue = Rectangle(height=0.8, width=4, color=spammer_color)
+        spammer_queue.move_to(LEFT_OFFSET * RIGHT + UP * 2.5)  # Moved left
+        spammer_label = Text("Spammer", color=spammer_color, font_size=24).next_to(
+            spammer_queue, UP, buff=0.2)
+
+        # Regular peer queues with equal spacing
+        spacing = 1.4
+        for i in range(3):
+            queue = Rectangle(height=0.8, width=4, color=peer_colors[i])
+            queue.next_to(spammer_queue, DOWN, buff=spacing * (i + 1))
+            label = Text(
+                f"Peer {i+1}", color=peer_colors[i], font_size=24).next_to(queue, UP, buff=0.2)
+            peer_queues.add(queue)
+            queue_labels.add(label)
+
+        # Fair Queue processor
+        processor = Rectangle(height=4, width=1.5, color=WHITE)
+        processor.move_to(RIGHT * 1.5)  # Adjusted position
+        processor_label = Text("Fair\nQueue", color=WHITE,
+                               font_size=24).move_to(processor)
+
+        # Draw initial setup
+        self.play(
+            *[Create(obj) for obj in [spammer_queue, *peer_queues, processor]],
+            *[Write(obj)
+              for obj in [spammer_label, *queue_labels, processor_label]],
+            run_time=1
+        )
+
+        # Initialize processed dots container
+        processed_dots = VGroup()
+        # Start position for processed dots
+        next_processed_x = processor.get_right()[0] + 1
+
+        # Create initial spammer messages (right to left)
+        spammer_dots = VGroup()
+        for i in range(5):
+            dot = Dot(color=spammer_color)
+            dot.move_to(spammer_queue.get_right() + LEFT *
+                        (0.5 + i * 0.5))  # Start from right
+            spammer_dots.add(dot)
+
+        self.play(
+            AnimationGroup(
+                *[FadeIn(dot, shift=LEFT)
+                  for dot in spammer_dots],  # Changed direction
+                lag_ratio=0.05
+            ),
+            run_time=0.5
+        )
+
+        # Function to create new peer message
+        def create_peer_message(peer_index):
+            dot = Dot(color=peer_colors[peer_index])
+            # Start from right
+            dot.move_to(peer_queues[peer_index].get_right() + LEFT * 0.5)
+            return dot
+
+        # Function to process message
+        def process_message(dot, is_priority=False):
+            # Move to processor
+            self.play(
+                dot.animate.move_to(processor.get_center()),
+                run_time=0.5 if is_priority else 1
+            )
+
+            # Move to next position in processed area
+            nonlocal next_processed_x
+            final_pos = np.array(
+                [next_processed_x, processor.get_center()[1], 0])
+            self.play(
+                dot.animate.move_to(final_pos),
+                run_time=0.3
+            )
+
+            next_processed_x += 0.25  # Increment position for next dot
+            processed_dots.add(dot)
+
+        # Initial peer messages
+        peer_dots = []
+        for i in range(3):
+            dot = create_peer_message(i)
+            peer_dots.append(dot)
+            self.play(FadeIn(dot), run_time=0.2)
+
+        # Continuous processing loop
+        for _ in range(3):
+            # Process one message from each peer (priority)
+            for i, dot in enumerate(peer_dots):
+                process_message(dot, is_priority=True)
+                # Create new peer message
+                new_dot = create_peer_message(i)
+                peer_dots[i] = new_dot
+                self.play(FadeIn(new_dot), run_time=0.2)
+
+            # Process one spammer message (take from rightmost position)
+            if len(spammer_dots) > 0:
+                rightmost_dot = spammer_dots[-1]  # Take rightmost dot
+                process_message(rightmost_dot)
+                spammer_dots.remove(rightmost_dot)
+
+                # Add new spammer message at the right
+                new_dot = Dot(color=spammer_color)
+                new_dot.move_to(spammer_queue.get_right() + LEFT * 0.5)
+                spammer_dots.add(new_dot)
+                self.play(FadeIn(new_dot), run_time=0.2)
+
+        # Final fade out
+        self.wait(0.5)
+        self.play(
+            *[FadeOut(mob) for mob in self.mobjects],
+            run_time=0.5
+        )
+
+
+if __name__ == "__main__":
+    scene = FairQueueAnimation()
+    scene.render()
